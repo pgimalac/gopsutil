@@ -347,8 +347,10 @@ func IOCountersWithContext(_ context.Context, names ...string) (map[string]IOCou
 				WriteBytes: uint64(dPerformance.BytesWritten),
 				ReadCount:  uint64(dPerformance.ReadCount),
 				WriteCount: uint64(dPerformance.WriteCount),
-				ReadTime:   uint64(dPerformance.ReadTime / 10000 / 1000), // convert to ms: https://github.com/giampaolo/psutil/issues/1012
-				WriteTime:  uint64(dPerformance.WriteTime / 10000 / 1000),
+				// as per https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntdddisk/ns-ntdddisk-_disk_performance
+				// ReadTime and WriteTime are in 100ns intervals, convert to ms
+				ReadTime:   uint64(dPerformance.ReadTime / 10000),
+				WriteTime:  uint64(dPerformance.WriteTime / 10000),
 				Name:       path,
 			}
 		}
