@@ -166,19 +166,39 @@ func TestSplitProcStat_fromFile(t *testing.T) {
 	}
 }
 
-func TestForegroundWithContext_commWithSpaces(t *testing.T) {
-	// comm is controlled by the process (prctl PR_SET_NAME) and may contain
-	// spaces, which must not shift the pgrp/tpgid fields.
+func TestForegroundWithContext(t *testing.T) {
 	procDir := t.TempDir()
 	require.NoError(t, os.Mkdir(procDir+"/4242", 0o700))
-	stat := "4242 (x 1 1 1 1) S 1 4242 4242 0 -1 4194304 0 0 0 0 0 0 0 0 20 0 1 0 100 0 0\n"
-	require.NoError(t, os.WriteFile(procDir+"/4242/stat", []byte(stat), 0o600))
 	t.Setenv("HOST_PROC", procDir)
-
 	p := &Process{Pid: 4242}
-	fg, err := p.ForegroundWithContext(context.Background())
-	require.NoError(t, err)
-	assert.False(t, fg)
+
+	cases := []struct {
+		name       string
+		comm       string
+		tpgid      int
+		foreground bool
+	}{
+		{"foreground", "command", 4242, true},
+		{"background", "command", 4243, false},
+		{"foreground with spaces", "test command", 4242, true},
+		{"background with spaces", "test command", 4243, false},
+		{"parentheses in name", "test ) ( cmd", 4242, true},
+		{"numeric words without terminal", "x 1 1 1 1 1 1 x", -1, false},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			tty := 34816
+			if tt.tpgid < 0 {
+				tty = 0
+			}
+			// Only fields through tpgid are needed for this query.
+			stat := fmt.Sprintf("4242 (%s) S 1 4242 4242 %d %d\n", tt.comm, tty, tt.tpgid)
+			require.NoError(t, os.WriteFile(procDir+"/4242/stat", []byte(stat), 0o600))
+			fg, err := p.ForegroundWithContext(t.Context())
+			require.NoError(t, err)
+			assert.Equal(t, tt.foreground, fg)
+		})
+	}
 }
 
 func TestFillFromCommWithContext(t *testing.T) {
